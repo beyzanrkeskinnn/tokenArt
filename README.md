@@ -42,6 +42,16 @@ graph TB
     H --> K[Purchase History]
     H --> L[Balance Management]
 ```
+<p align="center">
+  <img width="48%" src="https://github.com/user-attachments/assets/5defba26-4d1a-4da8-bb55-6844a07d3b1f" />
+  <img width="48%" src="https://github.com/user-attachments/assets/d6233997-e78d-4bd7-a73c-920ca299e005" />
+</p>
+
+<p align="center">
+  <img width="32%" src="https://github.com/user-attachments/assets/36d8b8b8-9c5e-45b1-828e-3f8caee0b3a7" />
+  <img width="32%" src="https://github.com/user-attachments/assets/309ed909-6c50-480e-b237-d8a878ca3f38" />
+  <img width="32%" src="https://github.com/user-attachments/assets/bf0fd7ad-4af3-4ebb-a66a-104f02b788f5" />
+</p>
 
 ## 📦 Installation
 
