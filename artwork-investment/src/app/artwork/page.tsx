@@ -248,7 +248,7 @@ function ArtworkDetailContent() {
                     placeholder="Enter amount in XLM"
                     min="1"
                     step="1"
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Minimum investment: 1 XLM
@@ -256,27 +256,41 @@ function ArtworkDetailContent() {
                 </div>
 
                 {/* Invest Button */}
-                <button
-                  onClick={handleInvest}
-                  disabled={isLoading || !investmentAmount}
-                  className={`w-full py-3 rounded-xl font-semibold text-white transition-all duration-200 ${
-                    isLoading || !investmentAmount
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-purple-600 hover:bg-purple-700 hover:shadow-lg transform hover:-translate-y-0.5'
-                  }`}
-                >
-                  {isLoading ? (
-                    <div className="flex items-center justify-center">
-                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-2"></div>
-                      Processing Investment...
+                {investmentData?.isFullyFunded ? (
+                  // Fully funded - Investment disabled
+                  <div className="space-y-3">
+                    <div className="w-full py-3 rounded-xl font-semibold text-white bg-green-600 flex items-center justify-center">
+                      <span className="mr-2">🎉</span>
+                      100% Funded - Investment Complete!
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-center">
-                      <span className="mr-2">🚀</span>
-                      Invest in Artwork
-                    </div>
-                  )}
-                </button>
+                    <p className="text-sm text-center text-gray-600">
+                      This artwork has reached its funding goal. It will be available for purchase soon.
+                    </p>
+                  </div>
+                ) : (
+                  // Investment still available
+                  <button
+                    onClick={handleInvest}
+                    disabled={isLoading || !investmentAmount}
+                    className={`w-full py-3 rounded-xl font-semibold text-white transition-all duration-200 ${
+                      isLoading || !investmentAmount
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-purple-600 hover:bg-purple-700 hover:shadow-lg transform hover:-translate-y-0.5'
+                    }`}
+                  >
+                    {isLoading ? (
+                      <div className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent mr-2"></div>
+                        Processing Investment...
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center">
+                        <span className="mr-2">🚀</span>
+                        Invest in Artwork
+                      </div>
+                    )}
+                  </button>
+                )}
 
                 {/* Transaction Result */}
                 {txResult && (

@@ -14,6 +14,7 @@ export default function MainPage() {
   
   const [activeTab, setActiveTab] = useState<'gallery' | 'investments' | 'sales' | 'purchases'>('gallery');
   const [userInvestments, setUserInvestments] = useState<Array<{ artworkId: string; artworkName: string; artist: string; investmentAmount: number; investmentDate: string; currentValue: number; shares: number }>>([]);
+  const [userSales, setUserSales] = useState<Array<{ artworkId: string; artworkName: string; artist: string; investmentAmount: number; saleDate: string; currentValue: number; shares: number; isFullyFunded: boolean }>>([]);
   const [userPurchases, setUserPurchases] = useState<Array<{ owner: string; artworkId: string; shares: number; investmentAmount: number; timestamp: string; txHash: string; artworkName: string; artist: string; purchasePrice: number; purchaseDate: number }>>([]);
   const [availableForPurchase, setAvailableForPurchase] = useState<Array<{ id: string; name: string; symbol: string; creator: string; financial: { funding_goal: number; current_funding: number; share_price: number; total_shares: number }; totalInvested: number; availableForPurchase: boolean }>>([]);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
@@ -128,10 +129,12 @@ export default function MainPage() {
 
   const loadUserData = () => {
     const investments = contractManager.getUserInvestments();
+    const sales = contractManager.getUserSales();
     const purchases = contractManager.getUserPurchases();
     const available = contractManager.getAvailableForPurchase();
     
     setUserInvestments(investments);
+    setUserSales(sales);
     setUserPurchases(purchases);
     setAvailableForPurchase(available);
   };
@@ -558,62 +561,122 @@ export default function MainPage() {
               My Sales
             </h2>
             <p className="text-gray-600 mb-6">
-              History of artworks you sold and your earnings.
+              Fully funded artworks ready for sale. Your investments are now profitable!
             </p>
             
-            <div className="bg-white rounded-2xl shadow-lg p-6">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-orange-200 to-pink-200 rounded-lg flex items-center justify-center">
-                      <span className="text-2xl">🎨</span>
+            {userSales.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {userSales.map((sale) => {
+                  const returnPercentage = ((sale.currentValue - sale.investmentAmount) / sale.investmentAmount * 100).toFixed(1);
+                  const isPositive = parseFloat(returnPercentage) >= 0;
+                  
+                  return (
+                    <div key={sale.artworkId} className="bg-white rounded-2xl shadow-lg p-6 border-2 border-green-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-bold text-gray-800">{sale.artworkName}</h3>
+                        <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full">
+                          🎉 100% Funded
+                        </span>
+                      </div>
+                      <p className="text-gray-600 text-sm mb-4">Artist: {sale.artist}</p>
+                      
+                      <div className="space-y-3">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Your Investment:</span>
+                          <span className="font-semibold">{sale.investmentAmount} XLM</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Current Value:</span>
+                          <span className={`font-semibold ${
+                            isPositive ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {sale.currentValue.toFixed(2)} XLM
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Potential Return:</span>
+                          <span className={`font-semibold ${
+                            isPositive ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {isPositive ? '+' : ''}{returnPercentage}%
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Your Shares:</span>
+                          <span className="font-semibold">{sale.shares} shares</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Investment Date:</span>
+                          <span className="text-sm text-gray-500">
+                            {new Date(sale.saleDate).toLocaleDateString('en-US')}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <div className="flex space-x-2">
+                          <button 
+                            onClick={() => router.push(`/artwork?id=${sale.artworkId}`)}
+                            className="flex-1 bg-purple-600 text-white py-2 px-4 rounded-lg text-sm hover:bg-purple-700 transition-colors"
+                          >
+                            View Details
+                          </button>
+                          <button className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg text-sm hover:bg-green-700 transition-colors">
+                            Sell Shares
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-800">Mediterranean Blue</h4>
-                      <p className="text-sm text-gray-600">Elena Rodriguez</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-green-600">+15 XLM</div>
-                    <div className="text-sm text-gray-500">June 18, 2025</div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-purple-200 to-blue-200 rounded-lg flex items-center justify-center">
-                      <span className="text-2xl">🎨</span>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-800">Golden Horizon</h4>
-                      <p className="text-sm text-gray-600">Sara Williams</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-green-600">+25 XLM</div>
-                    <div className="text-sm text-gray-500">June 10, 2025</div>
-                  </div>
-                </div>
+                  );
+                })}
               </div>
+            ) : (
+              <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+                <div className="text-4xl mb-4">📈</div>
+                <h3 className="text-gray-600 mb-2">No Sales Available Yet</h3>
+                <p className="text-sm text-gray-500 mb-4">Artworks become available for sale when they reach 100% funding</p>
+                <button 
+                  onClick={() => setActiveTab('gallery')}
+                  className="bg-purple-600 text-white py-2 px-4 rounded-lg text-sm hover:bg-purple-700 transition-colors"
+                >
+                  Go to Gallery
+                </button>
+              </div>
+            )}
 
-              {/* Sales Summary */}
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Sales Summary */}
+            {userSales.length > 0 && (
+              <div className="mt-6 bg-white rounded-2xl shadow-lg p-6">
+                <h3 className="text-lg font-bold text-gray-800 mb-4">Sales Summary</h3>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="text-center p-4 bg-green-50 rounded-lg">
-                    <div className="text-2xl font-bold text-green-600">40 XLM</div>
-                    <div className="text-sm text-green-600">Total Sales</div>
+                    <div className="text-2xl font-bold text-green-600">
+                      {userSales.reduce((sum, sale) => sum + sale.currentValue, 0).toFixed(2)} XLM
+                    </div>
+                    <div className="text-sm text-green-600">Total Sale Value</div>
                   </div>
                   <div className="text-center p-4 bg-blue-50 rounded-lg">
-                    <div className="text-2xl font-bold text-blue-600">2</div>
-                    <div className="text-sm text-blue-600">Artworks Sold</div>
+                    <div className="text-2xl font-bold text-blue-600">{userSales.length}</div>
+                    <div className="text-sm text-blue-600">Artworks Ready</div>
                   </div>
                   <div className="text-center p-4 bg-purple-50 rounded-lg">
-                    <div className="text-2xl font-bold text-purple-600">20 XLM</div>
-                    <div className="text-sm text-purple-600">Average Sale</div>
+                    <div className="text-2xl font-bold text-purple-600">
+                      +{(userSales.reduce((sum, sale) => sum + sale.currentValue, 0) - 
+                         userSales.reduce((sum, sale) => sum + sale.investmentAmount, 0)).toFixed(2)} XLM
+                    </div>
+                    <div className="text-sm text-purple-600">Potential Profit</div>
+                  </div>
+                  <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                    <div className="text-2xl font-bold text-yellow-600">
+                      +{(((userSales.reduce((sum, sale) => sum + sale.currentValue, 0) - 
+                           userSales.reduce((sum, sale) => sum + sale.investmentAmount, 0)) / 
+                         userSales.reduce((sum, sale) => sum + sale.investmentAmount, 0)) * 100).toFixed(1)}%
+                    </div>
+                    <div className="text-sm text-yellow-600">Average Return</div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 

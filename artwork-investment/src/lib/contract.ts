@@ -475,7 +475,7 @@ export class ContractManager {
       const investments = JSON.parse(localStorage.getItem('investments') || '{}');
       const userInvestments = [];
       
-      for (const [artworkId, data] of Object.entries(investments) as [string, { investors?: Array<{ address: string; amount: number; shares: number; timestamp: string }> }][]) {
+      for (const [artworkId, data] of Object.entries(investments) as [string, { total?: number; investors?: Array<{ address: string; amount: number; shares: number; timestamp: string }> }][]) {
         const userInvestment = data.investors?.find(inv => 
           inv.address === walletState.publicKey
         );
@@ -483,20 +483,70 @@ export class ContractManager {
         if (userInvestment) {
           const artwork = this.getSampleArtworks().find(art => art.id === artworkId);
           if (artwork) {
-            userInvestments.push({
-              artworkId,
-              artworkName: artwork.name,
-              artist: artwork.creator,
-              investmentAmount: userInvestment.amount,
-              investmentDate: userInvestment.timestamp,
-              currentValue: userInvestment.amount * 1.125, // Mock 12.5% return
-              shares: Math.floor(userInvestment.amount / artwork.financial.share_price)
-            });
+            const totalInvested = data.total || 0;
+            const isFullyFunded = totalInvested >= artwork.financial.funding_goal;
+            
+            // Only include non-fully-funded artworks in investments
+            if (!isFullyFunded) {
+              userInvestments.push({
+                artworkId,
+                artworkName: artwork.name,
+                artist: artwork.creator,
+                investmentAmount: userInvestment.amount,
+                investmentDate: userInvestment.timestamp,
+                currentValue: userInvestment.amount * 1.125, // Mock 12.5% return
+                shares: Math.floor(userInvestment.amount / artwork.financial.share_price)
+              });
+            }
           }
         }
       }
       
       return userInvestments;
+    }
+    return [];
+  }
+
+  // Get user's sales (fully funded artworks they invested in)
+  getUserSales(): Array<{ artworkId: string; artworkName: string; artist: string; investmentAmount: number; saleDate: string; currentValue: number; shares: number; isFullyFunded: boolean }> {
+    const walletState = this.walletManager.getStoredWalletState();
+    if (!walletState.isConnected || !walletState.publicKey) {
+      return [];
+    }
+
+    if (typeof window !== 'undefined') {
+      const investments = JSON.parse(localStorage.getItem('investments') || '{}');
+      const userSales = [];
+      
+      for (const [artworkId, data] of Object.entries(investments) as [string, { total?: number; investors?: Array<{ address: string; amount: number; shares: number; timestamp: string }> }][]) {
+        const userInvestment = data.investors?.find(inv => 
+          inv.address === walletState.publicKey
+        );
+        
+        if (userInvestment) {
+          const artwork = this.getSampleArtworks().find(art => art.id === artworkId);
+          if (artwork) {
+            const totalInvested = data.total || 0;
+            const isFullyFunded = totalInvested >= artwork.financial.funding_goal;
+            
+            // Only include fully funded artworks in sales
+            if (isFullyFunded) {
+              userSales.push({
+                artworkId,
+                artworkName: artwork.name,
+                artist: artwork.creator,
+                investmentAmount: userInvestment.amount,
+                saleDate: userInvestment.timestamp,
+                currentValue: userInvestment.amount * 1.25, // Mock 25% return for sales
+                shares: Math.floor(userInvestment.amount / artwork.financial.share_price),
+                isFullyFunded: true
+              });
+            }
+          }
+        }
+      }
+      
+      return userSales;
     }
     return [];
   }
