@@ -1,0 +1,309 @@
+// Real Stellar Soroban Contract Integration for TokenArt
+import { 
+  Contract,
+  rpc as SorobanRpc,
+  TransactionBuilder,
+  Networks,
+  BASE_FEE,
+  nativeToScVal,
+  scValToNative
+} from '@stellar/stellar-sdk';
+import { InvestmentData } from './types';
+import { WalletManager } from './wallet';
+
+// Deployed contract address on Stellar testnet
+const CONTRACT_ADDRESS = 'CDMIL7HW2XOXHR7K6TS2E2KULMLHTATSDW5PBONHOF5HWYC4C3BMN73T';
+
+// Soroban RPC server URL for testnet
+const SOROBAN_RPC_URL = 'https://soroban-testnet.stellar.org:443';
+
+export class RealContractManager {
+  private server: SorobanRpc.Server;
+  private contract: Contract;
+  private walletManager: WalletManager;
+
+  constructor() {
+    this.server = new SorobanRpc.Server(SOROBAN_RPC_URL);
+    this.contract = new Contract(CONTRACT_ADDRESS);
+    this.walletManager = WalletManager.getInstance();
+  }
+
+  // Initialize funding goals for all artworks (only needed once)
+  async initializeArtworkGoals(): Promise<void> {
+    const artworks = [
+      { id: 'art-001', goal: 20000 },
+      { id: 'art-002', goal: 15000 },
+      { id: 'art-003', goal: 12000 },
+      { id: 'art-004', goal: 25000 },
+      { id: 'art-005', goal: 35000 },
+      { id: 'art-006', goal: 18000 }
+    ];
+
+    for (const artwork of artworks) {
+      try {
+        await this.setFundingGoal(artwork.id, artwork.goal);
+      } catch (error) {
+        console.log(`Goal already set for ${artwork.id}:`, error);
+      }
+    }
+  }
+
+  // Set funding goal for an artwork (internal method)
+  private async setFundingGoal(artworkId: string, goal: number): Promise<string> {
+    const walletState = this.walletManager.getStoredWalletState();
+    if (!walletState.isConnected || !walletState.publicKey) {
+      throw new Error('Wallet not connected');
+    }
+
+    try {
+      // Get account info
+      const sourceKeypair = this.walletManager.getKeypair();
+      if (!sourceKeypair) {
+        throw new Error('Unable to get wallet keypair');
+      }
+
+      const sourceAccount = await this.server.getAccount(sourceKeypair.publicKey());
+
+      // Build transaction
+      const transaction = new TransactionBuilder(sourceAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+      })
+        .addOperation(
+          this.contract.call(
+            'set_funding_goal',
+            nativeToScVal(artworkId, { type: 'string' }),
+            nativeToScVal(goal, { type: 'u32' })
+          )
+        )
+        .setTimeout(30)
+        .build();
+
+      // Prepare and simulate transaction
+      const preparedTransaction = await this.server.prepareTransaction(transaction);
+      
+      // Sign transaction
+      preparedTransaction.sign(sourceKeypair);
+      
+      // Submit transaction
+      const result = await this.server.sendTransaction(preparedTransaction);
+      
+      if (result.status === 'PENDING') {
+        // Poll for transaction result
+        let getResponse = await this.server.getTransaction(result.hash);
+        while (getResponse.status === 'NOT_FOUND') {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          getResponse = await this.server.getTransaction(result.hash);
+        }
+        
+        if (getResponse.status === 'SUCCESS') {
+          return result.hash;
+        } else {
+          throw new Error(`Transaction failed: ${getResponse.resultXdr}`);
+        }
+      } else {
+        throw new Error(`Transaction failed immediately: ${result.errorResultXdr}`);
+      }
+    } catch (error) {
+      console.error('Failed to set funding goal:', error);
+      throw error;
+    }
+  }
+
+  // Invest in artwork (calls real Soroban contract)
+  async investInArtwork(artworkId: string, amount: number): Promise<string> {
+    const walletState = this.walletManager.getStoredWalletState();
+    if (!walletState.isConnected || !walletState.publicKey) {
+      throw new Error('Wallet not connected');
+    }
+
+    try {
+      // Convert XLM to stroops (1 XLM = 10,000,000 stroops)
+      const amountInStroops = Math.floor(amount * 10_000_000);
+
+      // Get account info
+      const sourceKeypair = this.walletManager.getKeypair();
+      if (!sourceKeypair) {
+        throw new Error('Unable to get wallet keypair');
+      }
+
+      const sourceAccount = await this.server.getAccount(sourceKeypair.publicKey());
+
+      // Build transaction
+      const transaction = new TransactionBuilder(sourceAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+      })
+        .addOperation(
+          this.contract.call(
+            'invest',
+            nativeToScVal(artworkId, { type: 'string' }),
+            nativeToScVal(walletState.publicKey, { type: 'address' }),
+            nativeToScVal(amountInStroops, { type: 'u32' })
+          )
+        )
+        .setTimeout(30)
+        .build();
+
+      // Prepare and simulate transaction
+      const preparedTransaction = await this.server.prepareTransaction(transaction);
+      
+      // Sign transaction
+      preparedTransaction.sign(sourceKeypair);
+      
+      // Submit transaction
+      const result = await this.server.sendTransaction(preparedTransaction);
+      
+      if (result.status === 'PENDING') {
+        // Poll for transaction result
+        let getResponse = await this.server.getTransaction(result.hash);
+        while (getResponse.status === 'NOT_FOUND') {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          getResponse = await this.server.getTransaction(result.hash);
+        }
+        
+        if (getResponse.status === 'SUCCESS') {
+          return result.hash;
+        } else {
+          throw new Error(`Transaction failed: ${getResponse.resultXdr}`);
+        }
+      } else {
+        throw new Error(`Transaction failed immediately: ${result.errorResultXdr}`);
+      }
+    } catch (error) {
+      console.error('Investment failed:', error);
+      throw error;
+    }
+  }
+
+  // Get total invested in artwork (from blockchain)
+  async getTotalInvested(artworkId: string): Promise<number> {
+    try {
+      // Build read-only transaction
+      const sourceKeypair = this.walletManager.getKeypair();
+      if (!sourceKeypair) {
+        throw new Error('Unable to get wallet keypair');
+      }
+
+      const sourceAccount = await this.server.getAccount(sourceKeypair.publicKey());
+
+      const transaction = new TransactionBuilder(sourceAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+      })
+        .addOperation(
+          this.contract.call(
+            'get_total_invested',
+            nativeToScVal(artworkId, { type: 'string' })
+          )
+        )
+        .setTimeout(30)
+        .build();
+
+      // Simulate transaction to get result
+      const result = await this.server.simulateTransaction(transaction);
+      
+      if (result.results && result.results.length > 0) {
+        // Convert result from stroops to XLM
+        const stroops = scValToNative(result.results[0].xdr);
+        return stroops / 10_000_000; // Convert stroops to XLM
+      }
+      
+      return 0;
+    } catch (error) {
+      console.error('Failed to get total invested:', error);
+      return 0;
+    }
+  }
+
+  // Get last investor (from blockchain)
+  async getLastInvestor(artworkId: string): Promise<string> {
+    try {
+      // Build read-only transaction
+      const sourceKeypair = this.walletManager.getKeypair();
+      if (!sourceKeypair) {
+        throw new Error('Unable to get wallet keypair');
+      }
+
+      const sourceAccount = await this.server.getAccount(sourceKeypair.publicKey());
+
+      const transaction = new TransactionBuilder(sourceAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+      })
+        .addOperation(
+          this.contract.call(
+            'get_last_investor',
+            nativeToScVal(artworkId, { type: 'string' })
+          )
+        )
+        .setTimeout(30)
+        .build();
+
+      // Simulate transaction to get result
+      const result = await this.server.simulateTransaction(transaction);
+      
+      if (result.results && result.results.length > 0) {
+        const resultValue = scValToNative(result.results[0].xdr);
+        return resultValue || 'None';
+      }
+      
+      return 'None';
+    } catch (error) {
+      console.error('Failed to get last investor:', error);
+      return 'None';
+    }
+  }
+
+  // Check if artwork is fully funded (from blockchain)
+  async isFullyFunded(artworkId: string): Promise<boolean> {
+    try {
+      // Build read-only transaction
+      const sourceKeypair = this.walletManager.getKeypair();
+      if (!sourceKeypair) {
+        throw new Error('Unable to get wallet keypair');
+      }
+
+      const sourceAccount = await this.server.getAccount(sourceKeypair.publicKey());
+
+      const transaction = new TransactionBuilder(sourceAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+      })
+        .addOperation(
+          this.contract.call(
+            'is_fully_funded',
+            nativeToScVal(artworkId, { type: 'string' })
+          )
+        )
+        .setTimeout(30)
+        .build();
+
+      // Simulate transaction to get result
+      const result = await this.server.simulateTransaction(transaction);
+      
+      if (result.results && result.results.length > 0) {
+        return scValToNative(result.results[0].xdr) || false;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Failed to check funding status:', error);
+      return false;
+    }
+  }
+
+  // Get investment data for an artwork (from blockchain)
+  async getInvestmentData(artworkId: string): Promise<InvestmentData> {
+    const totalInvested = await this.getTotalInvested(artworkId);
+    const lastInvestor = await this.getLastInvestor(artworkId);
+    const isFullyFunded = await this.isFullyFunded(artworkId);
+
+    return {
+      artworkId,
+      totalInvested,
+      lastInvestor,
+      isFullyFunded
+    };
+  }
+}

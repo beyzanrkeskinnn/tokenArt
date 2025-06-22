@@ -1,0 +1,460 @@
+// Stellar Soroban Contract Integration for TokenArt
+import { 
+  Keypair, 
+  TransactionBuilder, 
+  Networks,
+  Contract,
+  rpc,
+  nativeToScVal,
+  scValToNative,
+  BASE_FEE
+} from '@stellar/stellar-sdk';
+import { InvestmentData } from './types';
+import { WalletManager } from './wallet';
+
+// Mock sample artwork data
+const SAMPLE_ARTWORKS = [
+  {
+    id: 'art-001',
+    name: 'Sunset Over Bosphorus',
+    symbol: 'SOB01',
+    asset_type: 'painting' as const,
+    creator_info: {
+      name: 'Ayşe Demir',
+      location: 'Istanbul',
+      experience_years: 15,
+      certifications: ['Authenticity Certificate', 'Gallery Exhibit']
+    },
+    asset_details: {
+      dimensions: '70x90 cm',
+      medium: 'Oil on Canvas',
+      provenance: 'Private Collection',
+      authenticity_certified: true
+    },
+    timeline_info: {
+      creation_date: '2020-05-10',
+      exhibition_date: '2021-06-15',
+      estimated_sale_date: '2025-12-31',
+      quality_grade: 'A' as const
+    },
+    financial: {
+      funding_goal: 100,
+      current_funding: 75,
+      share_price: 5,
+      total_shares: 20
+    }
+  },
+  {
+    id: 'art-002',
+    name: 'Abstract Dreams',
+    symbol: 'AD02',
+    asset_type: 'painting' as const,
+    creator_info: {
+      name: 'Mehmet Özkan',
+      location: 'Ankara',
+      experience_years: 8,
+      certifications: ['Modern Art Certificate']
+    },
+    asset_details: {
+      dimensions: '60x80 cm',
+      medium: 'Acrylic on Canvas',
+      provenance: 'Artist Studio',
+      authenticity_certified: true
+    },
+    timeline_info: {
+      creation_date: '2023-03-15',
+      exhibition_date: '2024-01-10',
+      estimated_sale_date: '2026-06-30',
+      quality_grade: 'B' as const
+    },
+    financial: {
+      funding_goal: 150,
+      current_funding: 80,
+      share_price: 10,
+      total_shares: 15
+    }
+  },
+  {
+    id: 'art-003',
+    name: 'Mediterranean Blue',
+    symbol: 'MB03',
+    asset_type: 'painting' as const,
+    creator_info: {
+      name: 'Elena Rodriguez',
+      location: 'Izmir',
+      experience_years: 12,
+      certifications: ['International Art Award', 'Gallery Exhibition']
+    },
+    asset_details: {
+      dimensions: '50x70 cm',
+      medium: 'Watercolor on Paper',
+      provenance: 'Artist Collection',
+      authenticity_certified: true
+    },
+    timeline_info: {
+      creation_date: '2022-08-20',
+      exhibition_date: '2023-05-15',
+      estimated_sale_date: '2025-09-30',
+      quality_grade: 'A' as const
+    },
+    financial: {
+      funding_goal: 120,
+      current_funding: 24,
+      share_price: 8,
+      total_shares: 15
+    }
+  },
+  {
+    id: 'art-004',
+    name: 'Urban Symphony',
+    symbol: 'US04',
+    asset_type: 'painting' as const,
+    creator_info: {
+      name: 'Alex Chen',
+      location: 'Istanbul',
+      experience_years: 6,
+      certifications: ['Contemporary Art Certificate']
+    },
+    asset_details: {
+      dimensions: '80x100 cm',
+      medium: 'Mixed Media on Canvas',
+      provenance: 'Private Commission',
+      authenticity_certified: true
+    },
+    timeline_info: {
+      creation_date: '2024-01-10',
+      exhibition_date: '2024-06-01',
+      estimated_sale_date: '2026-12-31',
+      quality_grade: 'B' as const
+    },
+    financial: {
+      funding_goal: 250,
+      current_funding: 50,
+      share_price: 15,
+      total_shares: 17
+    }
+  },
+  {
+    id: 'art-005',
+    name: 'Golden Horizon',
+    symbol: 'GH05',
+    asset_type: 'painting' as const,
+    creator_info: {
+      name: 'Sara Williams',
+      location: 'Ankara',
+      experience_years: 20,
+      certifications: ['Master Artist', 'Museum Exhibition', 'Art Critic Choice']
+    },
+    asset_details: {
+      dimensions: '90x120 cm',
+      medium: 'Oil on Canvas',
+      provenance: 'Gallery Collection',
+      authenticity_certified: true
+    },
+    timeline_info: {
+      creation_date: '2019-11-30',
+      exhibition_date: '2020-03-15',
+      estimated_sale_date: '2025-08-31',
+      quality_grade: 'A' as const
+    },
+    financial: {
+      funding_goal: 350,
+      current_funding: 280,
+      share_price: 20,
+      total_shares: 18
+    }
+  },
+  {
+    id: 'art-006',
+    name: 'Mystic Forest',
+    symbol: 'MF06',
+    asset_type: 'painting' as const,
+    creator_info: {
+      name: 'David Miller',
+      location: 'Izmir',
+      experience_years: 10,
+      certifications: ['Nature Art Specialist', 'Environmental Art Award']
+    },
+    asset_details: {
+      dimensions: '65x85 cm',
+      medium: 'Tempera on Wood',
+      provenance: 'Artist Studio',
+      authenticity_certified: true
+    },
+    timeline_info: {
+      creation_date: '2023-09-05',
+      exhibition_date: '2024-02-20',
+      estimated_sale_date: '2026-03-31',
+      quality_grade: 'B' as const
+    },
+    financial: {
+      funding_goal: 180,
+      current_funding: 90,
+      share_price: 12,
+      total_shares: 15
+    }
+  }
+];
+
+export class ContractManager {
+  private server: rpc.Server;
+  private contract: Contract;
+  private contractId: string;
+  private walletManager: WalletManager;
+  private useRealContract: boolean;
+
+  constructor() {
+    // Initialize Stellar testnet server
+    this.server = new rpc.Server('https://soroban-testnet.stellar.org:443');
+    // Real deployed contract ID
+    this.contractId = 'CDMIL7HW2XOXHR7K6TS2E2KULMLHTATSDW5PBONHOF5HWYC4C3BMN73T';
+    this.contract = new Contract(this.contractId);
+    this.walletManager = WalletManager.getInstance();
+    
+    // Toggle between mock and real contract (set to false for demo, true for real blockchain)
+    this.useRealContract = false; // Set to false for now, we'll enable after fixing SDK issues
+  }
+
+  // Toggle between mock and real contract mode
+  setRealContractMode(enabled: boolean) {
+    this.useRealContract = enabled;
+  }
+
+  // Get sample artworks (mock data)
+  getSampleArtworks() {
+    return SAMPLE_ARTWORKS;
+  }
+
+  // Invest in artwork (calls Soroban contract)
+  async investInArtwork(artworkId: string, amount: number): Promise<string> {
+    try {
+      const walletState = this.walletManager.getStoredWalletState();
+      
+      if (!walletState.isConnected || !walletState.publicKey) {
+        throw new Error('Wallet not connected');
+      }
+
+      console.log(`Investing ${amount} XLM in artwork: ${artworkId}`);
+      console.log(`Investor: ${walletState.publicKey}`);
+
+      if (this.useRealContract) {
+        // Real blockchain implementation
+        return await this.investViaBlockchain(artworkId, amount, walletState.publicKey);
+      } else {
+        // Mock implementation (fallback)
+        const mockTxHash = `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Store investment locally for demo
+        if (typeof window !== 'undefined') {
+          const investments = JSON.parse(localStorage.getItem('investments') || '{}');
+          if (!investments[artworkId]) {
+            investments[artworkId] = { total: 0, lastInvestor: '', investors: [] };
+          }
+          investments[artworkId].total += amount;
+          investments[artworkId].lastInvestor = walletState.publicKey;
+          investments[artworkId].investors.push({
+            address: walletState.publicKey,
+            amount,
+            timestamp: Date.now()
+          });
+          localStorage.setItem('investments', JSON.stringify(investments));
+        }
+        return mockTxHash;
+      }
+    } catch (error) {
+      console.error('Investment failed:', error);
+      throw error;
+    }
+  }
+
+  // Real blockchain investment
+  private async investViaBlockchain(artworkId: string, amount: number, publicKey: string): Promise<string> {
+    try {
+      // Convert XLM to stroops (1 XLM = 10,000,000 stroops)
+      const amountInStroops = Math.floor(amount * 10_000_000);
+
+      // Use Freighter to sign and submit
+      const xdr = await this.buildInvestmentTransaction(artworkId, publicKey, amountInStroops);
+      const signedXdr = await this.walletManager.signTransaction(xdr, publicKey);
+      
+      // Submit to network
+      const transaction = TransactionBuilder.fromXDR(signedXdr, Networks.TESTNET);
+      const result = await this.server.sendTransaction(transaction);
+      
+      if (result.status === 'PENDING') {
+        // Poll for result
+        let getResponse = await this.server.getTransaction(result.hash);
+        while (getResponse.status === 'NOT_FOUND') {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          getResponse = await this.server.getTransaction(result.hash);
+        }
+        
+        if (getResponse.status === 'SUCCESS') {
+          return result.hash;
+        } else {
+          throw new Error(`Transaction failed: ${getResponse.resultXdr}`);
+        }
+      } else {
+        throw new Error(`Transaction failed immediately: ${result.errorResult}`);
+      }
+    } catch (error) {
+      console.error('Blockchain investment failed:', error);
+      throw error;
+    }
+  }
+
+  // Build investment transaction XDR
+  private async buildInvestmentTransaction(artworkId: string, publicKey: string, amountInStroops: number): Promise<string> {
+    const sourceAccount = await this.server.getAccount(publicKey);
+
+    const transaction = new TransactionBuilder(sourceAccount, {
+      fee: BASE_FEE,
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(
+        this.contract.call(
+          'invest',
+          nativeToScVal(Buffer.from(artworkId, 'utf8'), { type: 'bytes' }),
+          nativeToScVal(publicKey, { type: 'address' }),
+          nativeToScVal(amountInStroops, { type: 'u32' })
+        )
+      )
+      .setTimeout(30)
+      .build();
+
+    const preparedTransaction = await this.server.prepareTransaction(transaction);
+    return preparedTransaction.toXDR();
+  }
+
+  // Get total invested in artwork
+  async getTotalInvested(artworkId: string): Promise<number> {
+    try {
+      if (this.useRealContract) {
+        return await this.getTotalInvestedFromBlockchain(artworkId);
+      } else {
+        // Fallback to localStorage
+        if (typeof window !== 'undefined') {
+          const investments = JSON.parse(localStorage.getItem('investments') || '{}');
+          return investments[artworkId]?.total || 0;
+        }
+        return 0;
+      }
+    } catch (error) {
+      console.error('Failed to get total invested:', error);
+      return 0;
+    }
+  }
+
+  // Get total invested from blockchain
+  private async getTotalInvestedFromBlockchain(artworkId: string): Promise<number> {
+    try {
+      const dummyKeypair = Keypair.random();
+      const dummyAccount = await this.server.getAccount(dummyKeypair.publicKey());
+
+      const transaction = new TransactionBuilder(dummyAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+      })
+        .addOperation(
+          this.contract.call(
+            'get_total_invested',
+            nativeToScVal(Buffer.from(artworkId, 'utf8'), { type: 'bytes' })
+          )
+        )
+        .setTimeout(30)
+        .build();
+
+      const result = await this.server.simulateTransaction(transaction);
+      
+      if (result.result && result.result.retval) {
+        const stroops = scValToNative(result.result.retval);
+        return stroops / 10_000_000; // Convert stroops to XLM
+      }
+      
+      return 0;
+    } catch (error) {
+      console.error('Failed to get total invested from blockchain:', error);
+      return 0;
+    }
+  }
+
+  // Get last investor
+  async getLastInvestor(artworkId: string): Promise<string> {
+    try {
+      if (this.useRealContract) {
+        return await this.getLastInvestorFromBlockchain(artworkId);
+      } else {
+        // Fallback to localStorage
+        if (typeof window !== 'undefined') {
+          const investments = JSON.parse(localStorage.getItem('investments') || '{}');
+          return investments[artworkId]?.lastInvestor || 'None';
+        }
+        return 'None';
+      }
+    } catch (error) {
+      console.error('Failed to get last investor:', error);
+      return 'None';
+    }
+  }
+
+  // Get last investor from blockchain
+  private async getLastInvestorFromBlockchain(artworkId: string): Promise<string> {
+    try {
+      const dummyKeypair = Keypair.random();
+      const dummyAccount = await this.server.getAccount(dummyKeypair.publicKey());
+
+      const transaction = new TransactionBuilder(dummyAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: Networks.TESTNET,
+      })
+        .addOperation(
+          this.contract.call(
+            'get_last_investor',
+            nativeToScVal(Buffer.from(artworkId, 'utf8'), { type: 'bytes' })
+          )
+        )
+        .setTimeout(30)
+        .build();
+
+      const result = await this.server.simulateTransaction(transaction);
+      
+      if (result.results && result.results.length > 0) {
+        const resultValue = scValToNative(result.results[0].xdr);
+        return resultValue || 'None';
+      }
+      
+      return 'None';
+    } catch (error) {
+      console.error('Failed to get last investor from blockchain:', error);
+      return 'None';
+    }
+  }
+
+  // Check if artwork is fully funded
+  async isFullyFunded(artworkId: string): Promise<boolean> {
+    try {
+      const artwork = SAMPLE_ARTWORKS.find(art => art.id === artworkId);
+      if (!artwork) return false;
+
+      const totalInvested = await this.getTotalInvested(artworkId);
+      return totalInvested >= artwork.financial.funding_goal;
+    } catch (error) {
+      console.error('Failed to check funding status:', error);
+      return false;
+    }
+  }
+
+  // Get investment data for an artwork
+  async getInvestmentData(artworkId: string): Promise<InvestmentData> {
+    const totalInvested = await this.getTotalInvested(artworkId);
+    const lastInvestor = await this.getLastInvestor(artworkId);
+    const isFullyFunded = await this.isFullyFunded(artworkId);
+
+    return {
+      artworkId,
+      totalInvested,
+      lastInvestor,
+      isFullyFunded
+    };
+  }
+}
