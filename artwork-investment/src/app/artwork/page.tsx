@@ -115,8 +115,8 @@ function ArtworkDetailContent() {
   }
 
   const progressPercentage = investmentData 
-    ? Math.round((investmentData.totalInvested / artwork.financial.funding_goal) * 100)
-    : Math.round((artwork.financial.current_funding / artwork.financial.funding_goal) * 100);
+    ? Math.min(Math.round((investmentData.totalInvested / artwork.financial.funding_goal) * 100), 100)
+    : Math.min(Math.round((artwork.financial.current_funding / artwork.financial.funding_goal) * 100), 100);
 
   const totalInvested = investmentData?.totalInvested || artwork.financial.current_funding;
   const availableShares = Math.floor((artwork.financial.funding_goal - totalInvested) / artwork.financial.share_price);
@@ -261,10 +261,10 @@ function ArtworkDetailContent() {
                   <div className="space-y-3">
                     <div className="w-full py-3 rounded-xl font-semibold text-white bg-green-600 flex items-center justify-center">
                       <span className="mr-2">🎉</span>
-                      100% Funded - Investment Complete!
+                      100% Funded - This is now for sale!
                     </div>
                     <p className="text-sm text-center text-gray-600">
-                      This artwork has reached its funding goal. It will be available for purchase soon.
+                      This artwork has reached 100% funding and is now available for purchase.
                     </p>
                   </div>
                 ) : (
@@ -346,7 +346,7 @@ function ArtworkDetailContent() {
                       <div 
                         className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-500"
                         style={{ 
-                          width: `${Math.min(progressPercentage, 100)}%` 
+                          width: `${progressPercentage}%` 
                         }}
                       ></div>
                     </div>

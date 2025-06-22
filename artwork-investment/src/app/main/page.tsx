@@ -322,8 +322,9 @@ export default function MainPage() {
               {artworks.map(artwork => {
                 const investments = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('investments') || '{}') : {};
                 const totalInvested = investments[artwork.id]?.total || artwork.financial.current_funding;
-                const progressPercentage = Math.round((totalInvested / artwork.financial.funding_goal) * 100);
-                const isFullyFunded = progressPercentage >= 100;
+                const rawProgressPercentage = (totalInvested / artwork.financial.funding_goal) * 100;
+                const progressPercentage = Math.min(Math.round(rawProgressPercentage), 100); // Cap at 100%
+                const isFullyFunded = rawProgressPercentage >= 100;
                 
                 return (
                   <div 
@@ -390,7 +391,7 @@ export default function MainPage() {
                                 : 'bg-gradient-to-r from-purple-500 to-pink-500'
                             }`}
                             style={{ 
-                              width: `${Math.min(progressPercentage, 100)}%` 
+                              width: `${progressPercentage}%` 
                             }}
                           ></div>
                         </div>

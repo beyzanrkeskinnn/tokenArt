@@ -157,6 +157,12 @@ export class ContractManager {
           throw new Error('Yatırım miktarı 0\'dan büyük olmalıdır.');
         }
         
+        // Check if artwork is already fully funded
+        const isAlreadyFullyFunded = await this.isFullyFunded(artworkId);
+        if (isAlreadyFullyFunded) {
+          throw new Error('Bu sanat eseri zaten %100 fonlandı. Yatırım yapılamaz.');
+        }
+        
         // Validate amount precision (Stellar supports up to 7 decimal places)
         if (amount.toString().split('.')[1]?.length > 7) {
           throw new Error('Tutar çok fazla ondalık basamak içeriyor. Maksimum 7 ondalık basamak desteklenir.');
