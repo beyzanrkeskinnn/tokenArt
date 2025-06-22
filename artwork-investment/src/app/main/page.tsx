@@ -14,8 +14,8 @@ export default function MainPage() {
   
   const [activeTab, setActiveTab] = useState<'gallery' | 'investments' | 'sales' | 'purchases'>('gallery');
   const [userInvestments, setUserInvestments] = useState<Array<{ artworkId: string; artworkName: string; artist: string; investmentAmount: number; investmentDate: string; currentValue: number; shares: number }>>([]);
-  const [userPurchases, setUserPurchases] = useState<Array<{ owner: string; artworkId: string; shares: number; investmentAmount: number; timestamp: string; txHash: string }>>([]);
-  const [availableForPurchase, setAvailableForPurchase] = useState<Array<{ id: string; name: string; symbol: string; creator: string; financial: { funding_goal: number; current_funding: number; share_price: number; total_shares: number } }>>([]);
+  const [userPurchases, setUserPurchases] = useState<Array<{ owner: string; artworkId: string; shares: number; investmentAmount: number; timestamp: string; txHash: string; artworkName: string; artist: string; purchasePrice: number; purchaseDate: number }>>([]);
+  const [availableForPurchase, setAvailableForPurchase] = useState<Array<{ id: string; name: string; symbol: string; creator: string; financial: { funding_goal: number; current_funding: number; share_price: number; total_shares: number }; totalInvested: number; availableForPurchase: boolean }>>([]);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   
   const router = useRouter();

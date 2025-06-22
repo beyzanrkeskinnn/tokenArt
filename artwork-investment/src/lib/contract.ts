@@ -430,10 +430,13 @@ export class ContractManager {
           artworkId,
           purchasePrice,
           purchaseDate: Date.now(),
+          investmentAmount: purchasePrice, // Also store as investmentAmount for compatibility
+          timestamp: Date.now().toString(), // Also store as timestamp for compatibility
           owner: walletState.publicKey,
           artworkName: artwork.name,
           artist: artwork.creator,
-          txHash: mockTxHash
+          txHash: mockTxHash,
+          shares: artwork.financial.total_shares // Add shares for completeness
         };
         localStorage.setItem('purchases', JSON.stringify(purchases));
       }
@@ -447,7 +450,7 @@ export class ContractManager {
   }
 
   // Get user's purchased artworks
-  getUserPurchases(): Array<{ owner: string; artworkId: string; shares: number; investmentAmount: number; timestamp: string; txHash: string }> {
+  getUserPurchases(): Array<{ owner: string; artworkId: string; shares: number; investmentAmount: number; timestamp: string; txHash: string; artworkName: string; artist: string; purchasePrice: number; purchaseDate: number }> {
     const walletState = this.walletManager.getStoredWalletState();
     if (!walletState.isConnected || !walletState.publicKey) {
       return [];
@@ -455,7 +458,7 @@ export class ContractManager {
 
     if (typeof window !== 'undefined') {
       const purchases = JSON.parse(localStorage.getItem('purchases') || '{}');
-      return (Object.values(purchases) as Array<{ owner: string; artworkId: string; shares: number; investmentAmount: number; timestamp: string; txHash: string }>)
+      return (Object.values(purchases) as Array<{ owner: string; artworkId: string; shares: number; investmentAmount: number; timestamp: string; txHash: string; artworkName: string; artist: string; purchasePrice: number; purchaseDate: number }>)
         .filter(purchase => purchase.owner === walletState.publicKey);
     }
     return [];

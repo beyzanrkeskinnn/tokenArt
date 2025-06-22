@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { WalletManager } from '@/lib/wallet';
 import { ContractManager } from '@/lib/contract';
 import { WalletState, InvestmentData } from '@/lib/types';
 
-export default function ArtworkDetailPage() {
+function ArtworkDetailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const artworkId = searchParams.get('id');
@@ -391,5 +391,26 @@ export default function ArtworkDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Loading component for Suspense fallback
+function ArtworkDetailLoading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 flex items-center justify-center">
+      <div className="text-center">
+        <div className="text-4xl mb-4">🎨</div>
+        <p className="text-purple-600">Loading artwork details...</p>
+      </div>
+    </div>
+  );
+}
+
+// Main export with Suspense wrapper
+export default function ArtworkDetailPage() {
+  return (
+    <Suspense fallback={<ArtworkDetailLoading />}>
+      <ArtworkDetailContent />
+    </Suspense>
   );
 }
