@@ -6,7 +6,7 @@ TokenArt is an innovative platform running on the Stellar blockchain network tha
 
 - **Beyzanur Keskin** 
 - **Merve Altınışık** 
-- **Ayşegül Kerva** 
+- **Ayşegül Kervan** 
 
 
 ## 🚀 Project Features
@@ -53,8 +53,8 @@ graph TB
 
 ### 1. Clone the Project
 ```bash
-git clone https://github.com/your-username/TokenArt.git
-cd TokenArt/artwork-investment
+git clone https://github.com/beyzanrkeskinnn/tokenArt
+cd artwork-investment
 ```
 
 ### 2. Install Dependencies
@@ -137,7 +137,6 @@ artwork-investment/
 ```typescript
 // src/lib/contract.ts
 const TREASURY_ADDRESS = 'GDL3VFUZE65BUWBVRHJUJZN7O33XXPBUZA3CA6747FCGYHHCSSZXK336';
-const TREASURY_SECRET = 'SC6OM2KZ6BPXTCIKH3BYA2UEXGJPDKSWLUAJQWVOQOODXTMLYDMDU6LJ';
 ```
 
 ### Stellar Network Settings
@@ -228,15 +227,13 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) file for 
 
 ## 📞 Contact
 
-- **Project Repository**: [GitHub Repository](https://github.com/your-username/TokenArt)
+- **Project Repository**: [GitHub Repository](https://github.com/beyzanrkeskinnn/tokenArt)
 - **Demo**: [Live Demo](https://tokenart-demo.vercel.app)
-- **Documentation**: [Wiki](https://github.com/your-username/TokenArt/wiki)
 
 ## 🎯 Future Plans
 
 ### v2.0 Roadmap
 - [ ] 🌐 Mainnet support
-- [ ] 🎨 NFT integration
 - [ ] 📱 Mobile application
 - [ ] 🔄 Automatic arbitrage
 - [ ] 📈 Advanced analytics
