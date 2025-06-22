@@ -26,7 +26,7 @@ export class SimpleBalanceFetcher {
         console.log('🔍 [SIMPLE FETCH] Account data received');
         
         // Find native XLM balance
-        const nativeBalance = accountData.balances?.find((balance: any) => 
+        const nativeBalance = accountData.balances?.find((balance: { asset_type: string; balance: string }) => 
           balance.asset_type === 'native'
         );
         
@@ -51,11 +51,12 @@ export class SimpleBalanceFetcher {
           error: `API error: ${response.status} ${response.statusText}` 
         };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ [SIMPLE FETCH] Network error:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return { 
         balance: '0', 
-        error: `Network error: ${error.message}` 
+        error: `Network error: ${errorMessage}` 
       };
     }
   }
@@ -77,9 +78,10 @@ export class SimpleBalanceFetcher {
         console.log('❌ [SIMPLE FETCH] Funding failed:', errorText);
         return { success: false, error: errorText };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ [SIMPLE FETCH] Funding error:', error);
-      return { success: false, error: error.message };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return { success: false, error: errorMessage };
     }
   }
 }

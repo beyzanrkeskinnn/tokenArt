@@ -1,6 +1,5 @@
 // Working Stellar Payment Integration for TokenArt
 import { 
-  Keypair,
   Networks,
   Operation,
   TransactionBuilder,
@@ -31,6 +30,7 @@ export class ContractManager {
   constructor() {
     this.server = new Horizon.Server(HORIZON_SERVERS[currentServerIndex]);
     this.walletManager = WalletManager.getInstance();
+    this.validateTreasuryAddress();
   }
 
   // Get current server or switch to next available server
@@ -41,8 +41,7 @@ export class ContractManager {
         // Test server connectivity with a simple call
         await testServer.feeStats();
         return testServer;
-      } catch (error) {
-        console.warn(`Server ${HORIZON_SERVERS[currentServerIndex]} failed, trying next...`);
+      } catch {
         currentServerIndex = (currentServerIndex + 1) % HORIZON_SERVERS.length;
       }
     }
@@ -57,33 +56,43 @@ export class ContractManager {
     maxRetries: number = 3,
     delayMs: number = 2000
   ): Promise<T> {
-    let lastError: any;
+    let lastError: Error = new Error('Operation failed');
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         return await operation();
-      } catch (error: any) {
-        lastError = error;
-        console.warn(`Attempt ${attempt} failed:`, error.message);
+      } catch (error) {
+        lastError = error as Error;
+        console.warn(`Attempt ${attempt} failed:`, lastError.message);
         
         // Check if it's a timeout or network error
-        if (error.code === 'ERR_BAD_RESPONSE' || 
-            error.message?.includes('timeout') || 
-            error.message?.includes('504') ||
-            error.message?.includes('502') ||
-            error.message?.includes('503')) {
+        const errorObj = error as Record<string, unknown>;
+        if (errorObj.code === 'ERR_BAD_RESPONSE' || 
+            (lastError.message && (
+              lastError.message.includes('timeout') || 
+              lastError.message.includes('504') ||
+              lastError.message.includes('502') ||
+              lastError.message.includes('503') ||
+              lastError.message.includes('Cannot read properties of undefined')
+            ))) {
           
           if (attempt < maxRetries) {
             console.log(`Retrying in ${delayMs}ms... (attempt ${attempt + 1}/${maxRetries})`);
             await new Promise(resolve => setTimeout(resolve, delayMs));
             
             // Try switching server on network errors
-            this.server = await this.getWorkingServer();
+            try {
+              this.server = await this.getWorkingServer();
+              console.log('🔄 Switched to new server for retry');
+            } catch {
+              console.warn('Failed to get working server, using fallback');
+              this.server = new Horizon.Server(HORIZON_SERVERS[0]);
+            }
             continue;
           }
         } else {
           // For non-network errors, don't retry
-          throw error;
+          throw lastError;
         }
       }
     }
@@ -93,7 +102,18 @@ export class ContractManager {
 
   // Create investment memo for transaction
   private createInvestmentMemo(artworkId: string, amount: number): Memo {
-    const memoText = `INV:${artworkId}:${amount}`;
+    // Keep memo under 28 bytes for Stellar compatibility
+    const shortArtworkId = artworkId.replace('art-', '').slice(0, 8);
+    const memoText = `INV:${shortArtworkId}:${amount}`;
+    
+    // Ensure memo doesn't exceed 28 bytes
+    if (memoText.length > 28) {
+      const truncatedMemo = `INV:${shortArtworkId}:${Math.floor(amount)}`;
+      console.warn('⚠️  Memo truncated to fit 28-byte limit:', truncatedMemo);
+      return Memo.text(truncatedMemo.slice(0, 28));
+    }
+    
+    console.log('📝 Investment memo:', memoText);
     return Memo.text(memoText);
   }
 
@@ -125,82 +145,166 @@ export class ContractManager {
 
     const publicKey = walletState.publicKey; // TypeScript guard
     
-    return this.retryOperation(async () => {
-      console.log('💰 [INVESTMENT] Starting real investment transaction...');
-      console.log('💰 [INVESTMENT] Artwork:', artworkId);
-      console.log('💰 [INVESTMENT] Amount:', amount, 'XLM');
-      console.log('💰 [INVESTMENT] From:', publicKey);
+    try {
+      return await this.retryOperation(async () => {
+        console.log('💰 [INVESTMENT] Starting real investment transaction...');
+        console.log('💰 [INVESTMENT] Artwork:', artworkId);
+        console.log('💰 [INVESTMENT] Amount:', amount, 'XLM');
+        console.log('💰 [INVESTMENT] From:', publicKey);
 
-      // Validate investment amount
-      if (amount <= 0) {
-        throw new Error('Yatırım miktarı 0\'dan büyük olmalıdır.');
-      }
+        // Validate investment amount
+        if (amount <= 0) {
+          throw new Error('Yatırım miktarı 0\'dan büyük olmalıdır.');
+        }
+        
+        // Validate amount precision (Stellar supports up to 7 decimal places)
+        if (amount.toString().split('.')[1]?.length > 7) {
+          throw new Error('Tutar çok fazla ondalık basamak içeriyor. Maksimum 7 ondalık basamak desteklenir.');
+        }
 
-      // Check user balance first
-      const balanceData = await this.walletManager.getBalance(publicKey);
-      const currentBalance = parseFloat(balanceData.native);
-      
-      if (currentBalance < amount) {
-        throw new Error(`Yetersiz bakiye. Mevcut: ${currentBalance.toFixed(2)} XLM, Gerekli: ${amount} XLM`);
-      }
+        // Ensure server is ready and working
+        await this.ensureServerReady();
+        const workingServer = this.server;
 
-      // Load user's account for sequence number with retry-enabled server
-      console.log('💰 [INVESTMENT] Loading user account...');
-      const userAccount = await this.server.loadAccount(publicKey);
+        // Check user balance first
+        const balanceData = await this.walletManager.getBalance(publicKey);
+        const currentBalance = parseFloat(balanceData.native);
+        
+        if (currentBalance < amount) {
+          throw new Error(`Yetersiz bakiye. Mevcut: ${currentBalance.toFixed(2)} XLM, Gerekli: ${amount} XLM`);
+        }
 
-      // Create payment operation to treasury
-      const paymentOperation = Operation.payment({
-        destination: TREASURY_ADDRESS,
-        asset: Asset.native(),
-        amount: amount.toString(),
-        source: publicKey
+        // Load user's account for sequence number with retry-enabled server
+        console.log('💰 [INVESTMENT] Loading user account...');
+        const userAccount = await workingServer.loadAccount(publicKey);
+        console.log('📊 Account sequence:', userAccount.sequence);
+
+        // Create payment operation to treasury
+        const paymentOperation = Operation.payment({
+          destination: TREASURY_ADDRESS,
+          asset: Asset.native(),
+          amount: amount.toFixed(7), // Ensure proper decimal formatting
+          source: publicKey
+        });
+
+        // Build transaction with proper fee calculation
+        console.log('💰 [INVESTMENT] Building transaction...');
+        const baseFee = await workingServer.fetchBaseFee();
+        console.log('💰 Base fee:', baseFee);
+        
+        const transaction = new TransactionBuilder(userAccount, {
+          fee: Math.max(baseFee * 100, 10000).toString(), // Use dynamic fee or minimum 0.001 XLM
+          networkPassphrase: Networks.TESTNET,
+        })
+          .addOperation(paymentOperation)
+          .addMemo(this.createInvestmentMemo(artworkId, amount))
+          .setTimeout(300) // 5 minutes timeout
+          .build();
+
+        console.log('💰 [INVESTMENT] Transaction built, requesting signature...');
+        console.log('📋 Transaction XDR preview:', transaction.toXDR().slice(0, 100) + '...');
+
+        // Sign transaction with Freighter
+        const signedTxXdr = await this.walletManager.signTransaction(transaction.toXDR());
+        
+        // Submit to network with retry-enabled server
+        console.log('💰 [INVESTMENT] Submitting to Stellar network...');
+        console.log('📋 Signed transaction XDR preview:', signedTxXdr.slice(0, 100) + '...');
+        const txResponse = await workingServer.submitTransaction(
+          TransactionBuilder.fromXDR(signedTxXdr, Networks.TESTNET)
+        );
+
+        console.log('✅ [INVESTMENT] Transaction successful:', txResponse.hash);
+
+        // Save investment record locally
+        this.saveInvestmentRecord(artworkId, amount, txResponse.hash, publicKey);
+
+        return txResponse.hash;
       });
-
-      // Build transaction
-      console.log('💰 [INVESTMENT] Building transaction...');
-      const transaction = new TransactionBuilder(userAccount, {
-        fee: '10000', // 0.001 XLM fee
-        networkPassphrase: Networks.TESTNET,
-      })
-        .addOperation(paymentOperation)
-        .addMemo(this.createInvestmentMemo(artworkId, amount))
-        .setTimeout(300) // 5 minutes timeout
-        .build();
-
-      console.log('💰 [INVESTMENT] Transaction built, requesting signature...');
-
-      // Sign transaction with Freighter
-      const signedTxXdr = await this.walletManager.signTransaction(transaction.toXDR());
-      
-      // Submit to network with retry-enabled server
-      console.log('💰 [INVESTMENT] Submitting to Stellar network...');
-      const txResponse = await this.server.submitTransaction(
-        TransactionBuilder.fromXDR(signedTxXdr, Networks.TESTNET)
-      );
-
-      console.log('✅ [INVESTMENT] Transaction successful:', txResponse.hash);
-
-      // Save investment record locally
-      this.saveInvestmentRecord(artworkId, amount, txResponse.hash, publicKey);
-
-      return txResponse.hash;
-
-    }).catch((error: any) => {
+    } catch (error: unknown) {
       console.error('❌ [INVESTMENT] Transaction failed:', error);
       
-      if (error.message?.includes('insufficient funds')) {
-        throw new Error('Yetersiz bakiye. Lütfen hesabınıza XLM ekleyin.');
-      } else if (error.message?.includes('user rejected')) {
-        throw new Error('İşlem kullanıcı tarafından iptal edildi.');
-      } else if (error.code === 'ERR_BAD_RESPONSE' || 
-                 error.message?.includes('504') || 
-                 error.message?.includes('timeout') ||
-                 error.message?.includes('Gateway Timeout')) {
-        throw new Error('Stellar ağı şu anda yoğun. Lütfen birkaç saniye sonra tekrar deneyin.');
-      } else {
-        throw new Error(`Yatırım işlemi başarısız: ${error.message || error}`);
+      const errorObj = error as Record<string, unknown>;
+      const errorMessage = (error as Error).message || 'Unknown error';
+      
+      // Log detailed error information for debugging
+      if (errorObj.response && typeof errorObj.response === 'object') {
+        const response = errorObj.response as Record<string, unknown>;
+        if (response.data) {
+          console.error('📋 Detailed error data:', response.data);
+        }
+        if (response.status) {
+          console.error('📊 HTTP Status:', response.status);
+        }
       }
-    });
+      
+      if (errorMessage.includes('insufficient funds')) {
+        throw new Error('Yetersiz bakiye. Lütfen hesabınıza XLM ekleyin.');
+      } else if (errorMessage.includes('user rejected') || errorMessage.includes('rejected')) {
+        throw new Error('İşlem kullanıcı tarafından iptal edildi.');
+      } else if (errorMessage.includes('Wallet connection lost') || errorMessage.includes('message channel closed')) {
+        throw new Error('Wallet bağlantısı kesildi. Lütfen sayfayı yenileyin ve tekrar deneyin.');
+      } else if (errorMessage.includes('timeout')) {
+        throw new Error('İşlem zaman aşımına uğradı. Lütfen tekrar deneyin.');
+      } else if (errorObj.response && typeof errorObj.response === 'object') {
+        const response = errorObj.response as Record<string, unknown>;
+        if (response.status === 400) {
+          // Handle 400 Bad Request errors specifically
+          const responseData = response.data as Record<string, unknown>;
+          const errorDetails = responseData?.extras as Record<string, unknown>;
+          const resultCodes = errorDetails?.result_codes as Record<string, unknown>;
+          
+          if (resultCodes) {
+            console.error('🚨 Transaction error codes:', resultCodes);
+            if (resultCodes.transaction === 'tx_bad_seq') {
+              throw new Error('Hesap sıra numarası hatası. Lütfen tekrar deneyin.');
+            } else if (resultCodes.transaction === 'tx_insufficient_balance') {
+              throw new Error('Yetersiz bakiye. Minimum 1.5 XLM gereklidir.');
+            } else if (Array.isArray(resultCodes.operations) && resultCodes.operations.includes('op_underfunded')) {
+              throw new Error('İşlem için yetersiz bakiye.');
+            } else {
+              throw new Error(`İşlem hatası: ${resultCodes.transaction || 'Bilinmeyen hata'}`);
+            }
+          } else {
+            throw new Error('Geçersiz işlem. Lütfen bilgileri kontrol edin ve tekrar deneyin.');
+          }
+        }
+      } 
+      
+      if (errorObj.code === 'ERR_BAD_RESPONSE' || 
+          errorMessage.includes('504') || 
+          errorMessage.includes('Gateway Timeout')) {
+        throw new Error('Stellar ağı şu anda yoğun. Lütfen birkaç saniye sonra tekrar deneyin.');
+      } else if (errorMessage.includes('Cannot read properties of undefined')) {
+        throw new Error('Bağlantı hatası. Lütfen sayfayı yenileyin ve tekrar deneyin.');
+      } else {
+        throw new Error(`Yatırım işlemi başarısız: ${errorMessage}`);
+      }
+    }
+  }
+
+  // Validate treasury address format
+  private validateTreasuryAddress(): void {
+    if (!TREASURY_ADDRESS || TREASURY_ADDRESS.length !== 56 || !TREASURY_ADDRESS.startsWith('G')) {
+      throw new Error('Invalid treasury address configuration');
+    }
+    console.log('✅ Treasury address validated:', TREASURY_ADDRESS.slice(0, 8) + '...');
+  }
+
+  // Verify server is ready for operations
+  private async ensureServerReady(): Promise<void> {
+    try {
+      if (!this.server) {
+        console.log('🔄 Server not initialized, getting working server...');
+        this.server = await this.getWorkingServer();
+      }
+      
+      // Quick connectivity test
+      await this.server.feeStats();
+    } catch {
+      console.warn('⚠️  Current server not ready, switching...');
+      this.server = await this.getWorkingServer();
+    }
   }
 
   // Get total invested amount for an artwork (read-only call)
@@ -343,7 +447,7 @@ export class ContractManager {
   }
 
   // Get user's purchased artworks
-  getUserPurchases(): any[] {
+  getUserPurchases(): Array<{ owner: string; artworkId: string; shares: number; investmentAmount: number; timestamp: string; txHash: string }> {
     const walletState = this.walletManager.getStoredWalletState();
     if (!walletState.isConnected || !walletState.publicKey) {
       return [];
@@ -351,15 +455,14 @@ export class ContractManager {
 
     if (typeof window !== 'undefined') {
       const purchases = JSON.parse(localStorage.getItem('purchases') || '{}');
-      return Object.values(purchases).filter((purchase: any) => 
-        purchase.owner === walletState.publicKey
-      );
+      return (Object.values(purchases) as Array<{ owner: string; artworkId: string; shares: number; investmentAmount: number; timestamp: string; txHash: string }>)
+        .filter(purchase => purchase.owner === walletState.publicKey);
     }
     return [];
   }
 
   // Get user's investments
-  getUserInvestments(): any[] {
+  getUserInvestments(): Array<{ artworkId: string; artworkName: string; artist: string; investmentAmount: number; investmentDate: string; currentValue: number; shares: number }> {
     const walletState = this.walletManager.getStoredWalletState();
     if (!walletState.isConnected || !walletState.publicKey) {
       return [];
@@ -369,8 +472,8 @@ export class ContractManager {
       const investments = JSON.parse(localStorage.getItem('investments') || '{}');
       const userInvestments = [];
       
-      for (const [artworkId, data] of Object.entries(investments) as [string, any][]) {
-        const userInvestment = data.investors?.find((inv: any) => 
+      for (const [artworkId, data] of Object.entries(investments) as [string, { investors?: Array<{ address: string; amount: number; shares: number; timestamp: string }> }][]) {
+        const userInvestment = data.investors?.find(inv => 
           inv.address === walletState.publicKey
         );
         
@@ -396,7 +499,17 @@ export class ContractManager {
   }
 
   // Get fully funded artworks available for purchase
-  getAvailableForPurchase(): any[] {
+  getAvailableForPurchase(): Array<{ 
+    id: string; 
+    name: string; 
+    symbol: string; 
+    creator: string; 
+    artwork_details: { dimensions: string; medium: string; year: string; condition: string; provenance: string }; 
+    creator_info: { name: string; bio: string; certifications: string[] }; 
+    financial: { funding_goal: number; current_funding: number; share_price: number; total_shares: number }; 
+    totalInvested: number; 
+    availableForPurchase: boolean; 
+  }> {
     const artworks = this.getSampleArtworks();
     const availableArtworks = [];
     
@@ -406,7 +519,7 @@ export class ContractManager {
         const purchases = JSON.parse(localStorage.getItem('purchases') || '{}');
         
         // Check if fully funded and not already purchased
-        const totalInvested = investments[artwork.id]?.total || artwork.financial.current_funding;
+        const totalInvested = (investments[artwork.id]?.total as number) || artwork.financial.current_funding;
         const isFullyFunded = totalInvested >= artwork.financial.funding_goal;
         const isAlreadyPurchased = purchases[artwork.id];
         
@@ -583,7 +696,7 @@ export class ContractManager {
         status: latency < 1000 ? 'good' : latency < 3000 ? 'slow' : 'poor',
         latency
       };
-    } catch (error) {
+    } catch {
       return {
         status: 'offline',
         latency: Date.now() - startTime

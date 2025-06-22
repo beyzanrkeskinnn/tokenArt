@@ -13,9 +13,9 @@ export default function MainPage() {
   });
   
   const [activeTab, setActiveTab] = useState<'gallery' | 'investments' | 'sales' | 'purchases'>('gallery');
-  const [userInvestments, setUserInvestments] = useState<any[]>([]);
-  const [userPurchases, setUserPurchases] = useState<any[]>([]);
-  const [availableForPurchase, setAvailableForPurchase] = useState<any[]>([]);
+  const [userInvestments, setUserInvestments] = useState<Array<{ artworkId: string; artworkName: string; artist: string; investmentAmount: number; investmentDate: string; currentValue: number; shares: number }>>([]);
+  const [userPurchases, setUserPurchases] = useState<Array<{ owner: string; artworkId: string; shares: number; investmentAmount: number; timestamp: string; txHash: string }>>([]);
+  const [availableForPurchase, setAvailableForPurchase] = useState<Array<{ id: string; name: string; symbol: string; creator: string; financial: { funding_goal: number; current_funding: number; share_price: number; total_shares: number } }>>([]);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   
   const router = useRouter();
@@ -109,7 +109,7 @@ export default function MainPage() {
       
       if (response.ok) {
         const data = await response.json();
-        const nativeBalance = data.balances.find((b: any) => b.asset_type === 'native');
+        const nativeBalance = data.balances.find((b: { asset_type: string; balance: string }) => b.asset_type === 'native');
         const balance = nativeBalance ? parseFloat(nativeBalance.balance) : 0;
         console.log('💰 [DIRECT] Direct balance found:', balance);
         return balance;
@@ -139,11 +139,11 @@ export default function MainPage() {
   const handlePurchaseArtwork = async (artworkId: string) => {
     try {
       const txHash = await contractManager.purchaseArtwork(artworkId);
-      alert(`Satın alma başarılı! Transaction: ${txHash}`);
+      alert(`Purchase successful! Transaction: ${txHash}`);
       loadUserData(); // Refresh data
       await loadBalance(); // Refresh balance
     } catch (error) {
-      alert(`Satın alma başarısız: ${error}`);
+      alert(`Purchase failed: ${error}`);
     }
   };
 
@@ -203,9 +203,9 @@ export default function MainPage() {
                       </p>
                       <button
                         onClick={async () => {
-                          if (walletState.publicKey && (window as any).fundAccount) {
+                          if (walletState.publicKey && (window as { fundAccount?: (publicKey: string) => Promise<void> }).fundAccount) {
                             console.log('🏦 Auto-funding account...');
-                            await (window as any).fundAccount(walletState.publicKey);
+                            await ((window as unknown) as { fundAccount: (publicKey: string) => Promise<void> }).fundAccount(walletState.publicKey);
                             setTimeout(() => loadBalance(), 3000);
                           }
                         }}
@@ -235,9 +235,9 @@ export default function MainPage() {
                 onClick={() => {
                   console.log('🔧 [DEBUG] Current wallet state:', walletState);
                   console.log('🔧 [DEBUG] Stored state:', walletManager.getStoredWalletState());
-                  if (walletState.publicKey && (window as any).simpleBalanceTest) {
+                  if (walletState.publicKey && (window as { simpleBalanceTest?: (publicKey: string) => void }).simpleBalanceTest) {
                     console.log('🔧 [DEBUG] Running simple balance test...');
-                    (window as any).simpleBalanceTest(walletState.publicKey);
+                    ((window as unknown) as { simpleBalanceTest: (publicKey: string) => void }).simpleBalanceTest(walletState.publicKey);
                   }
                 }}
                 className="px-3 py-1 text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-md transition-colors"
@@ -266,7 +266,7 @@ export default function MainPage() {
               }`}
             >
               <span className="mr-2">🖼️</span>
-              Galeri
+              Gallery
             </button>
             <button
               onClick={() => setActiveTab('investments')}
@@ -277,7 +277,7 @@ export default function MainPage() {
               }`}
             >
               <span className="mr-2">💰</span>
-              Yatırımlarım
+              My Investments
             </button>
             <button
               onClick={() => setActiveTab('sales')}
@@ -288,7 +288,7 @@ export default function MainPage() {
               }`}
             >
               <span className="mr-2">📈</span>
-              Satışlarım
+              My Sales
             </button>
             <button
               onClick={() => setActiveTab('purchases')}
@@ -299,7 +299,7 @@ export default function MainPage() {
               }`}
             >
               <span className="mr-2">🛒</span>
-              Satın Aldıklarım
+              My Purchases
             </button>
           </div>
         </div>
@@ -338,13 +338,13 @@ export default function MainPage() {
                         <span className={`text-white text-xs px-2 py-1 rounded-full flex items-center ${
                           isFullyFunded ? 'bg-green-500' : 'bg-green-500'
                         }`}>
-                          {isFullyFunded ? '🎉 Satın Alınabilir' : '✅ Verified'}
+                          {isFullyFunded ? '🎉 Available for Purchase' : '✅ Verified'}
                         </span>
                       </div>
                       {isFullyFunded && (
                         <div className="absolute bottom-3 left-3">
                           <span className="bg-yellow-500 text-white text-xs px-2 py-1 rounded-full">
-                            %100 Fonlandı
+                            100% Funded
                           </span>
                         </div>
                       )}
@@ -417,7 +417,7 @@ export default function MainPage() {
                             : 'text-purple-600 hover:text-purple-800'
                         }`}>
                           <span className="mr-1">{isFullyFunded ? '🛒' : '👆'}</span>
-                          {isFullyFunded ? 'Satın Alınabilir!' : 'Click to View Details & Invest'}
+                          {isFullyFunded ? 'Available for Purchase!' : 'Click to View Details & Invest'}
                         </span>
                       </div>
                     </div>
@@ -433,15 +433,15 @@ export default function MainPage() {
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-800 mb-2 flex items-center">
               <span className="mr-3">💰</span>
-              Yatırımlarım
+              My Investments
             </h2>
             <p className="text-gray-600 mb-6">
-              Yatırım yaptığınız eserleri ve kazancınızı görüntüleyin.
+              View your invested artworks and earnings.
             </p>
             
             {userInvestments.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {userInvestments.map((investment, index) => {
+                {userInvestments.map((investment) => {
                   const returnPercentage = ((investment.currentValue - investment.investmentAmount) / investment.investmentAmount * 100).toFixed(1);
                   const isPositive = parseFloat(returnPercentage) >= 0;
                   
@@ -459,11 +459,11 @@ export default function MainPage() {
                       </div>
                       <div className="space-y-3">
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Yatırım Tutarı:</span>
+                          <span className="text-gray-600">Investment Amount:</span>
                           <span className="font-semibold">{investment.investmentAmount} XLM</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Mevcut Değer:</span>
+                          <span className="text-gray-600">Current Value:</span>
                           <span className={`font-semibold ${
                             isPositive ? 'text-green-600' : 'text-red-600'
                           }`}>
@@ -471,13 +471,13 @@ export default function MainPage() {
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Sahip Olunan Hisse:</span>
-                          <span className="font-semibold">{investment.shares} adet</span>
+                          <span className="text-gray-600">Shares Owned:</span>
+                          <span className="font-semibold">{investment.shares} shares</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Yatırım Tarihi:</span>
+                          <span className="text-gray-600">Investment Date:</span>
                           <span className="text-sm text-gray-500">
-                            {new Date(investment.investmentDate).toLocaleDateString('tr-TR')}
+                            {new Date(investment.investmentDate).toLocaleDateString('en-US')}
                           </span>
                         </div>
                       </div>
@@ -487,10 +487,10 @@ export default function MainPage() {
                             onClick={() => router.push(`/artwork?id=${investment.artworkId}`)}
                             className="flex-1 bg-purple-600 text-white py-2 px-4 rounded-lg text-sm hover:bg-purple-700 transition-colors"
                           >
-                            Detayları Gör
+                            View Details
                           </button>
                           <button className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg text-sm hover:bg-gray-200 transition-colors">
-                            Sat
+                            Sell
                           </button>
                         </div>
                       </div>
@@ -501,13 +501,13 @@ export default function MainPage() {
             ) : (
               <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
                 <div className="text-4xl mb-4">💰</div>
-                <h3 className="text-gray-600 mb-2">Henüz Yatırım Yapmadınız</h3>
-                <p className="text-sm text-gray-500 mb-4">Galeri'den beğendiğiniz eserlere yatırım yaparak başlayın</p>
+                <h3 className="text-gray-600 mb-2">No Investments Yet</h3>
+                <p className="text-sm text-gray-500 mb-4">Start by investing in artworks you like from the Gallery</p>
                 <button 
                   onClick={() => setActiveTab('gallery')}
                   className="bg-purple-600 text-white py-2 px-4 rounded-lg text-sm hover:bg-purple-700 transition-colors"
                 >
-                  Galeri'ye Git
+                  Go to Gallery
                 </button>
               </div>
             )}
@@ -515,26 +515,26 @@ export default function MainPage() {
             {/* Investment Summary */}
             {userInvestments.length > 0 && (
               <div className="mt-6 bg-white rounded-2xl shadow-lg p-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">Yatırım Özeti</h3>
+                <h3 className="text-lg font-bold text-gray-800 mb-4">Investment Summary</h3>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="text-center p-4 bg-blue-50 rounded-lg">
                     <div className="text-2xl font-bold text-blue-600">
                       {userInvestments.reduce((sum, inv) => sum + inv.investmentAmount, 0)} XLM
                     </div>
-                    <div className="text-sm text-blue-600">Toplam Yatırım</div>
+                    <div className="text-sm text-blue-600">Total Investment</div>
                   </div>
                   <div className="text-center p-4 bg-green-50 rounded-lg">
                     <div className="text-2xl font-bold text-green-600">
                       {userInvestments.reduce((sum, inv) => sum + inv.currentValue, 0).toFixed(2)} XLM
                     </div>
-                    <div className="text-sm text-green-600">Mevcut Değer</div>
+                    <div className="text-sm text-green-600">Current Value</div>
                   </div>
                   <div className="text-center p-4 bg-purple-50 rounded-lg">
                     <div className="text-2xl font-bold text-purple-600">
                       +{(userInvestments.reduce((sum, inv) => sum + inv.currentValue, 0) - 
                          userInvestments.reduce((sum, inv) => sum + inv.investmentAmount, 0)).toFixed(2)} XLM
                     </div>
-                    <div className="text-sm text-purple-600">Net Kazanç</div>
+                    <div className="text-sm text-purple-600">Net Profit</div>
                   </div>
                   <div className="text-center p-4 bg-yellow-50 rounded-lg">
                     <div className="text-2xl font-bold text-yellow-600">
@@ -542,7 +542,7 @@ export default function MainPage() {
                            userInvestments.reduce((sum, inv) => sum + inv.investmentAmount, 0)) / 
                          userInvestments.reduce((sum, inv) => sum + inv.investmentAmount, 0)) * 100).toFixed(1)}%
                     </div>
-                    <div className="text-sm text-yellow-600">Toplam Getiri</div>
+                    <div className="text-sm text-yellow-600">Total Return</div>
                   </div>
                 </div>
               </div>
@@ -555,10 +555,10 @@ export default function MainPage() {
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-800 mb-2 flex items-center">
               <span className="mr-3">📈</span>
-              Satışlarım
+              My Sales
             </h2>
             <p className="text-gray-600 mb-6">
-              Sattığınız eserlerin geçmişi ve kazancınız.
+              History of artworks you sold and your earnings.
             </p>
             
             <div className="bg-white rounded-2xl shadow-lg p-6">
@@ -575,7 +575,7 @@ export default function MainPage() {
                   </div>
                   <div className="text-right">
                     <div className="text-lg font-bold text-green-600">+15 XLM</div>
-                    <div className="text-sm text-gray-500">18 Haziran 2025</div>
+                    <div className="text-sm text-gray-500">June 18, 2025</div>
                   </div>
                 </div>
 
@@ -591,7 +591,7 @@ export default function MainPage() {
                   </div>
                   <div className="text-right">
                     <div className="text-lg font-bold text-green-600">+25 XLM</div>
-                    <div className="text-sm text-gray-500">10 Haziran 2025</div>
+                    <div className="text-sm text-gray-500">June 10, 2025</div>
                   </div>
                 </div>
               </div>
@@ -601,15 +601,15 @@ export default function MainPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="text-center p-4 bg-green-50 rounded-lg">
                     <div className="text-2xl font-bold text-green-600">40 XLM</div>
-                    <div className="text-sm text-green-600">Toplam Satış</div>
+                    <div className="text-sm text-green-600">Total Sales</div>
                   </div>
                   <div className="text-center p-4 bg-blue-50 rounded-lg">
                     <div className="text-2xl font-bold text-blue-600">2</div>
-                    <div className="text-sm text-blue-600">Satılan Eser</div>
+                    <div className="text-sm text-blue-600">Artworks Sold</div>
                   </div>
                   <div className="text-center p-4 bg-purple-50 rounded-lg">
                     <div className="text-2xl font-bold text-purple-600">20 XLM</div>
-                    <div className="text-sm text-purple-600">Ortalama Satış</div>
+                    <div className="text-sm text-purple-600">Average Sale</div>
                   </div>
                 </div>
               </div>
@@ -622,10 +622,10 @@ export default function MainPage() {
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-800 mb-2 flex items-center">
               <span className="mr-3">🛒</span>
-              Satın Aldıklarım
+              My Purchases
             </h2>
             <p className="text-gray-600 mb-6">
-              Tamamen satın aldığınız ve sahip olduğunuz eserler.
+              Artworks you completely purchased and own.
             </p>
 
             {/* Available for Purchase Section */}
@@ -633,7 +633,7 @@ export default function MainPage() {
               <div className="mb-8">
                 <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
                   <span className="mr-2">🎯</span>
-                  Satın Alınabilir Eserler (%100 Fonlanmış)
+                  Available for Purchase (100% Funded)
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
                   {availableForPurchase.map(artwork => (
@@ -642,7 +642,7 @@ export default function MainPage() {
                         <span className="text-6xl">🖼️</span>
                         <div className="absolute top-3 right-3">
                           <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full">
-                            ✅ Satın Alınabilir
+                            ✅ Available for Purchase
                           </span>
                         </div>
                       </div>
@@ -651,16 +651,16 @@ export default function MainPage() {
                         <p className="text-gray-600 text-sm mb-3">{artwork.creator}</p>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
-                            <span className="text-gray-600">Satın Alma Fiyatı:</span>
+                            <span className="text-gray-600">Purchase Price:</span>
                             <span className="font-semibold text-green-600">{artwork.financial.funding_goal} XLM</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-600">Fonlanan Miktar:</span>
+                            <span className="text-gray-600">Funded Amount:</span>
                             <span className="font-semibold">{artwork.totalInvested} XLM</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-600">Durum:</span>
-                            <span className="font-semibold text-green-600">%100 Fonlandı</span>
+                            <span className="text-gray-600">Status:</span>
+                            <span className="font-semibold text-green-600">100% Funded</span>
                           </div>
                         </div>
                         <div className="mt-4">
@@ -668,7 +668,7 @@ export default function MainPage() {
                             onClick={() => handlePurchaseArtwork(artwork.id)}
                             className="w-full bg-green-600 text-white py-2 px-4 rounded-lg text-sm hover:bg-green-700 transition-colors"
                           >
-                            🛒 Satın Al
+                            🛒 Purchase
                           </button>
                         </div>
                       </div>
@@ -681,7 +681,7 @@ export default function MainPage() {
             {/* Owned Artworks Section */}
             <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
               <span className="mr-2">🏆</span>
-              Sahip Olduğum Eserler
+              Artworks I Own
             </h3>
             
             {userPurchases.length > 0 ? (
@@ -696,32 +696,31 @@ export default function MainPage() {
                       <p className="text-gray-600 text-sm mb-3">{purchase.artist}</p>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Satın Alma Fiyatı:</span>
-                          <span className="font-semibold">{purchase.purchasePrice} XLM</span>
+                          <span className="text-gray-600">Purchase Price:</span>
+                          <span className="font-semibold">{purchase.investmentAmount} XLM</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Sahip Olma Tarihi:</span>
+                          <span className="text-gray-600">Ownership Date:</span>
                           <span className="text-gray-500">
-                            {new Date(purchase.purchaseDate).toLocaleDateString('tr-TR')}
+                            {new Date(purchase.timestamp).toLocaleDateString('en-US')}
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Mevcut Değer:</span>
+                          <span className="text-gray-600">Current Value:</span>
                           <span className="font-semibold text-green-600">
-                            {(purchase.purchasePrice * 1.2).toFixed(0)} XLM
+                            {(purchase.investmentAmount * 1.2).toFixed(0)} XLM
                           </span>
                         </div>
-                      </div>
-                      <div className="mt-4 pt-4 border-t border-gray-100">
-                        <div className="flex space-x-2">
-                          <button className="flex-1 bg-purple-600 text-white py-2 px-4 rounded-lg text-sm hover:bg-purple-700 transition-colors">
-                            Detayları Gör
-                          </button>
-                          <button className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg text-sm hover:bg-gray-200 transition-colors">
-                            Sat
-                          </button>
+                      </div>                        <div className="mt-4 pt-4 border-t border-gray-100">
+                          <div className="flex space-x-2">
+                            <button className="flex-1 bg-purple-600 text-white py-2 px-4 rounded-lg text-sm hover:bg-purple-700 transition-colors">
+                              View Details
+                            </button>
+                            <button className="flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-lg text-sm hover:bg-gray-200 transition-colors">
+                              Sell
+                            </button>
+                          </div>
                         </div>
-                      </div>
                     </div>
                   </div>
                 ))}
@@ -730,13 +729,13 @@ export default function MainPage() {
               !availableForPurchase.length && (
                 <div className="bg-white rounded-2xl shadow-lg p-6 flex flex-col items-center justify-center text-center">
                   <div className="text-4xl mb-4">🎨</div>
-                  <h3 className="text-gray-600 mb-2">Henüz Eser Satın Almadınız</h3>
-                  <p className="text-sm text-gray-500 mb-4">%100 fonlanan eserler satın alınabilir hale gelecek</p>
+                  <h3 className="text-gray-600 mb-2">No Artworks Purchased Yet</h3>
+                  <p className="text-sm text-gray-500 mb-4">100% funded artworks will become available for purchase</p>
                   <button 
                     onClick={() => setActiveTab('gallery')}
                     className="bg-purple-600 text-white py-2 px-4 rounded-lg text-sm hover:bg-purple-700 transition-colors"
                   >
-                    Galeri'ye Git
+                    Go to Gallery
                   </button>
                 </div>
               )
@@ -745,23 +744,23 @@ export default function MainPage() {
             {/* Purchase Summary */}
             {userPurchases.length > 0 && (
               <div className="mt-6 bg-white rounded-2xl shadow-lg p-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">Satın Alma Özeti</h3>
+                <h3 className="text-lg font-bold text-gray-800 mb-4">Purchase Summary</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="text-center p-4 bg-blue-50 rounded-lg">
                     <div className="text-2xl font-bold text-blue-600">{userPurchases.length}</div>
-                    <div className="text-sm text-blue-600">Sahip Olunan Eser</div>
+                    <div className="text-sm text-blue-600">Owned Artworks</div>
                   </div>
                   <div className="text-center p-4 bg-green-50 rounded-lg">
                     <div className="text-2xl font-bold text-green-600">
-                      {userPurchases.reduce((sum, purchase) => sum + purchase.purchasePrice, 0)} XLM
+                      {userPurchases.reduce((sum, purchase) => sum + purchase.investmentAmount, 0)} XLM
                     </div>
-                    <div className="text-sm text-green-600">Toplam Harcama</div>
+                    <div className="text-sm text-green-600">Total Spent</div>
                   </div>
                   <div className="text-center p-4 bg-purple-50 rounded-lg">
                     <div className="text-2xl font-bold text-purple-600">
-                      {userPurchases.reduce((sum, purchase) => sum + (purchase.purchasePrice * 1.2), 0).toFixed(0)} XLM
+                      {userPurchases.reduce((sum, purchase) => sum + (purchase.investmentAmount * 1.2), 0).toFixed(0)} XLM
                     </div>
-                    <div className="text-sm text-purple-600">Mevcut Değer</div>
+                    <div className="text-sm text-purple-600">Current Value</div>
                   </div>
                 </div>
               </div>

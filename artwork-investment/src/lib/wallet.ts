@@ -32,7 +32,7 @@ export class WalletManager {
       const { isAllowed } = await import('@stellar/freighter-api');
       
       // First check if extension is available
-      if (typeof window !== 'undefined' && (window as any).freighter) {
+      if (typeof window !== 'undefined' && (window as { freighter?: unknown }).freighter) {
         console.log('🔍 [FREIGHTER] Extension detected via window.freighter');
         return true;
       }
@@ -218,7 +218,7 @@ export class WalletManager {
         
         // Find native (XLM) balance
         const nativeBalance = account.balances.find(
-          (balance: any) => balance.asset_type === 'native'
+          (balance: { asset_type: string; balance: string }) => balance.asset_type === 'native'
         );
 
         if (!nativeBalance) {
@@ -238,11 +238,11 @@ export class WalletManager {
         console.log(`✅ [BALANCE ATTEMPT ${attempt}] SDK Success:`, balance, 'XLM');
         return { native: balance };
         
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error(`❌ [BALANCE ATTEMPT ${attempt}/${MAX_RETRIES}] SDK Error:`, error);
         
         // Handle 404 - account not found
-        if (error.response?.status === 404) {
+        if ((error as { response?: { status: number } }).response?.status === 404) {
           console.warn('🔍 [BALANCE] Account not found on testnet - needs funding');
           return { 
             native: '0', 
@@ -252,7 +252,14 @@ export class WalletManager {
         
         // If this is the last attempt, return error
         if (attempt === MAX_RETRIES) {
-          const errorMsg = error.message || error.toString();
+          let errorMsg = 'Unknown error';
+          if (error instanceof Error) {
+            errorMsg = error.message;
+          } else if (typeof error === 'string') {
+            errorMsg = error;
+          } else if (error && typeof error === 'object' && 'toString' in error) {
+            errorMsg = String(error);
+          }
           console.error('❌ [BALANCE] All SDK attempts failed:', errorMsg);
           return { 
             native: '0', 
@@ -295,26 +302,55 @@ export class WalletManager {
         console.warn('⚠️ [CONNECTIVITY] Horizon server returned:', response.status);
         return { success: false, error: `Server returned ${response.status}` };
       }
-    } catch (error: any) {
-      console.error('❌ [CONNECTIVITY] Horizon server unreachable:', error.message);
-      return { success: false, error: error.message };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('❌ [CONNECTIVITY] Horizon server unreachable:', errorMessage);
+      return { success: false, error: errorMessage };
     }
   }
 
   // Sign transaction with Freighter
   async signTransaction(transactionXdr: string): Promise<string> {
     try {
-      const result = await signTransaction(transactionXdr, {
+      console.log('🖋️  Requesting transaction signature from Freighter...');
+      
+      // Check if wallet is still connected
+      const isWalletConnected = await isConnected();
+      if (!isWalletConnected) {
+        throw new Error('Wallet is not connected. Please connect first.');
+      }
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Transaction signing timed out')), 30000); // 30 second timeout
+      });
+      
+      const signPromise = signTransaction(transactionXdr, {
         networkPassphrase: 'Test SDF Network ; September 2015'
       });
+      
+      const result = await Promise.race([signPromise, timeoutPromise]);
       
       if (result.error) {
         throw new Error(result.error);
       }
       
+      console.log('✅ Transaction signed successfully');
       return result.signedTxXdr;
-    } catch (error) {
-      throw new Error(`Transaction signing failed: ${error}`);
+    } catch (error: unknown) {
+      console.error('❌ Transaction signing failed:', error);
+      
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      if (errorMessage?.includes('User declined') || errorMessage?.includes('rejected')) {
+        throw new Error('Transaction was rejected by user');
+      } else if (errorMessage?.includes('timeout')) {
+        throw new Error('Transaction signing timed out. Please try again.');
+      } else if (errorMessage?.includes('message channel closed')) {
+        throw new Error('Wallet connection lost. Please refresh and try again.');
+      } else {
+        throw new Error(`Transaction signing failed: ${errorMessage}`);
+      }
     }
   }
 

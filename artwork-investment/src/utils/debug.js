@@ -174,7 +174,7 @@ if (typeof window !== 'undefined') {
       for (const test of tests) {
         try {
           const start = Date.now();
-          const response = await fetch(test.url, { 
+          await fetch(test.url, { 
             method: 'HEAD',
             mode: 'no-cors'
           });
@@ -261,4 +261,5 @@ if (typeof window !== 'undefined') {
   console.log('🚀 TokenArt Debug utilities loaded! Type TokenArtDebug.help() for commands');
 }
 
-export default {};
+const debugUtilities = {};
+export default debugUtilities;
